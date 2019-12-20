@@ -32,6 +32,7 @@ public class GtDispatcherServlet extends HttpServlet {
     //IOC容器，存放实例
     private Map<String, Object> ioc = new HashMap<String, Object>();
 
+    //存放映射参数信息
     private List<Handler> handlerMapping = new ArrayList<Handler>();
 
     @Override
@@ -70,14 +71,20 @@ public class GtDispatcherServlet extends HttpServlet {
                 int index = handler.getParamIndexMapping().get(entry.getKey());
                 parameteValues[index] = convert(parameterTypes[index], value);//数字类型转换
             }
-            //TODO 需处理方法是否有 HttpServletRequest HttpServletResponse
-            int reqIndex = handler.getParamIndexMapping().get(HttpServletRequest.class.getName());
-            parameteValues[reqIndex] = req;
 
-            int respIndex = handler.getParamIndexMapping().get(HttpServletResponse.class.getName());
-            parameteValues[respIndex] = resp;
+            //判断是否注入 HttpServletRequest  HttpServletResponse
+            if (handler.getParamIndexMapping().containsKey(HttpServletRequest.class.getName())){
+                int reqIndex = handler.getParamIndexMapping().get(HttpServletRequest.class.getName());
+                parameteValues[reqIndex] = req;
+            }
 
-            handler.getMethod().invoke(handler.getController(), parameteValues);//反射执行controller方法
+            if (handler.getParamIndexMapping().containsKey(HttpServletResponse.class.getName())){
+                int respIndex = handler.getParamIndexMapping().get(HttpServletResponse.class.getName());
+                parameteValues[respIndex] = resp;
+            }
+
+            //反射执行controller方法
+            handler.getMethod().invoke(handler.getController(), parameteValues);
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -93,7 +100,7 @@ public class GtDispatcherServlet extends HttpServlet {
         requestURL = requestURL.replace(contextPath, "");
 
         for (Handler handler : handlerMapping) {
-            Matcher matcher = handler.getPattern().matcher(requestURL);//匹配正则
+            Matcher matcher = handler.getPattern().matcher(requestURL);//匹配正则 与mapping里面的对比
             if (!matcher.matches()) {
                 continue;
             }
@@ -124,7 +131,7 @@ public class GtDispatcherServlet extends HttpServlet {
     private void loadConfig(String contextConfigLocation) {
         InputStream inputStream = this.getClass().getClassLoader().getResourceAsStream(contextConfigLocation);
         try {
-            contextConfig.load(inputStream);
+            contextConfig.load(inputStream); //加载配置文件
         } catch (IOException e) {
             e.printStackTrace();
         } finally {
@@ -191,13 +198,6 @@ public class GtDispatcherServlet extends HttpServlet {
         } catch (Exception e) {
             e.printStackTrace();
         }
-
-        System.out.println("IOC容器开始-------------");
-        for (Map.Entry<String, Object> entry : ioc.entrySet()) {
-            System.out.println("键 = " + entry.getKey() + "，值 = " + entry.getValue());
-        }
-        System.out.println("IOC容器结束-------------");
-
     }
 
     private void startAutoWired() {
@@ -217,9 +217,6 @@ public class GtDispatcherServlet extends HttpServlet {
                 }
                 field.setAccessible(true);//安全检查，可访问私有字段
                 try {
-                    System.out.println("beanName = " + beanName);
-                    System.out.println("entry.getValue() = " + entry.getValue());
-                    System.out.println("ioc.get(beanName) = " + ioc.get(beanName));
                     field.set(entry.getValue(), ioc.get(beanName));//对象的字段设置为指定的新值.
                 } catch (IllegalAccessException e) {
                     e.printStackTrace();
@@ -274,7 +271,7 @@ public class GtDispatcherServlet extends HttpServlet {
 
 
     /**
-     * 类型转换
+     * 类型转换 int 包装类型
      * @param type
      * @param value
      * @return
